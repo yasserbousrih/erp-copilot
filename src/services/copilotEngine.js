@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const config = require('../config');
 const FrappeClient = require('../client/frappeClient');
 const { executeTool, definitions } = require('../tools/frappeTools');
+const { ingestErpMessage } = require('./agentBrainClient');
 
 const hasArabic = (text) => /[\u0600-\u06ff]/.test(text);
 const pickIntent = (message) => {
@@ -27,6 +28,22 @@ class CopilotEngine {
     const language = hasArabic(message) ? 'ar' : 'en';
     const intent = pickIntent(message);
     const executions = [];
+
+    const brainResult = await ingestErpMessage({
+      tenantId: tenantId || 'default',
+      conversationId: conversationId || `erp-${Date.now()}`,
+      message: { role: 'user', content: message },
+      instructions: 'You are the ERP Copilot. Evaluate ERP intent, use available Frappe tools for factual data, and answer naturally in the user\'s language. Never invent ERP facts. Mutations must remain drafts.',
+      clientConfig: { doctypeContext: doctypeContext || undefined },
+    });
+    if (brainResult?.reply || brainResult?.message) {
+      return {
+        reply: brainResult.reply || brainResult.message,
+        toolExecutions: brainResult.toolExecutions || brainResult.actions || [],
+        state: { tenantId, conversationId, language, intent, source: 'agent-brain', ...(brainResult.aiState ? { aiState: brainResult.aiState } : {}) },
+      };
+    }
+
     let data;
     try {
       if (this.llm) {
