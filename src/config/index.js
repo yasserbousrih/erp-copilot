@@ -16,7 +16,6 @@ module.exports = Object.freeze({
   OPENAI_API_KEY: text(process.env.OPENAI_API_KEY),
   OPENROUTER_API_KEY: text(process.env.OPENROUTER_API_KEY),
   AGENT_BRAIN_URL: text(process.env.AGENT_BRAIN_URL, 'http://127.0.0.1:3000').replace(/\/$/, ''),
-  AGENT_ID: text(process.env.AGENT_ID, '5e5ee3b4-c1bf-4d0a-9a60-69991b432e55'),
   BRAIN_CHANNEL_HMAC_KEY: text(process.env.BRAIN_CHANNEL_HMAC_KEY || process.env.BRAIN_SHARED_SECRET || process.env.PROVISION_SHARED_SECRET),
   ERP_AUTH_TOKEN: text(process.env.ERP_AUTH_TOKEN),
   LOG_LEVEL: text(process.env.LOG_LEVEL, 'info'),

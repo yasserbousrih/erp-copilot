@@ -11,13 +11,14 @@ async function ingestErpMessage({ tenantId = 'default', ...payload }) {
   }
 
   try {
+    const agentId = payload.agentId ?? payload.clientConfig?.agentId;
     const response = await axios.post(`${config.AGENT_BRAIN_URL}/brain/ingest`, {
       source: 'lite',
       workspaceId: tenantId,
       tenantId,
       channel: 'web',
       ...payload,
-      agentId: payload.agentId || config.AGENT_ID,
+      ...(agentId !== undefined ? { agentId } : {}),
     }, { headers, timeout: 15000 });
     return response.data;
   } catch (error) {

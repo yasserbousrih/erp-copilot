@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../src/app');
 const frappeClient = require('../src/client/frappeClient');
 const agentBrainClient = require('../src/services/agentBrainClient');
+const { definitions } = require('../src/tools/frappeTools');
 
 jest.mock('../src/client/frappeClient');
 jest.mock('../src/services/agentBrainClient');
@@ -69,6 +70,42 @@ describe('copilot routes and engine', () => {
     expect(response.status).toBe(200);
     expect(response.body.doctype).toBe('Item');
     expect(response.body.schema.fields[0].fieldtype).toBe('Data');
+  });
+
+  test('exports OpenAI tool definitions from the mounted route', async () => {
+    const response = await request(app).get('/api/copilot/export/openai');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ data: definitions });
+  });
+
+  test('invokes a named tool from the mounted workflow contract', async () => {
+    const response = await request(app).post('/api/copilot/invoke').send({
+      workflow_key: 'frappe_query',
+      params: { doctype: 'Item', fields: ['name'] },
+      context: { tenantId: 'tenant-1' },
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true, result: [{ item_code: 'ITEM-1', actual_qty: 12 }] });
+    expect(frappeClient.prototype.getList).toHaveBeenCalledWith('Item', { fields: ['name'], filters: undefined, limit: undefined });
+  });
+
+  test('aliases OpenAI export and invocation at the root', async () => {
+    const exportResponse = await request(app).get('/export/openai');
+    const invokeResponse = await request(app).post('/invoke').send({
+      name: 'frappe_query',
+      args: { doctype: 'Item' },
+    });
+    expect(exportResponse.status).toBe(200);
+    expect(exportResponse.body).toEqual({ data: definitions });
+    expect(invokeResponse.status).toBe(200);
+    expect(invokeResponse.body.success).toBe(true);
+  });
+
+  test('returns a failed invocation response when a tool errors', async () => {
+    frappeClient.prototype.getList.mockRejectedValue(new Error('backend unavailable'));
+    const response = await request(app).post('/invoke').send({ workflow_key: 'frappe_query', params: { doctype: 'Item' } });
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ success: false, error: 'backend unavailable' });
   });
 
   test('returns a safe 500 on tool failure', async () => {

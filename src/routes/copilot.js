@@ -2,10 +2,23 @@ const express = require('express');
 const { z } = require('zod');
 const CopilotEngine = require('../services/copilotEngine');
 const FrappeClient = require('../client/frappeClient');
+const { definitions, executeTool } = require('../tools/frappeTools');
 
 const router = express.Router();
 const engine = new CopilotEngine();
 const turnSchema = z.object({ message: z.string().trim().min(1), tenantId: z.string().optional(), conversationId: z.string().optional(), doctypeContext: z.string().optional() });
+
+const exportOpenAi = (req, res) => res.json({ data: definitions });
+const invoke = async (req, res) => {
+  const { workflow_key: workflowKey, name, params, args } = req.body || {};
+  const toolName = name || workflowKey;
+  const toolArgs = params ?? args ?? {};
+  try {
+    return res.json({ success: true, result: await executeTool(toolName, toolArgs) });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 router.post('/turn', async (req, res, next) => {
   const parsed = turnSchema.safeParse(req.body);
@@ -18,5 +31,10 @@ router.get('/schema/:doctype', async (req, res, next) => {
 });
 
 router.get('/health', (req, res) => res.json({ status: 'healthy', service: 'erp-copilot' }));
+router.get('/export/openai', exportOpenAi);
+router.post('/invoke', invoke);
+
+router.exportOpenAi = exportOpenAi;
+router.invoke = invoke;
 
 module.exports = router;
