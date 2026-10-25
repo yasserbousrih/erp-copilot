@@ -17,6 +17,7 @@ async function ingestErpMessage({ tenantId = 'default', ...payload }) {
       tenantId,
       channel: 'web',
       ...payload,
+      agentId: payload.agentId || config.AGENT_ID,
     }, { headers, timeout: 15000 });
     return response.data;
   } catch (error) {
