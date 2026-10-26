@@ -78,6 +78,15 @@ describe('copilot routes and engine', () => {
     expect(response.body).toEqual({ data: definitions });
   });
 
+  test('exports capability metadata for read and write tools', async () => {
+    const response = await request(app).get('/export/openai');
+    const toolsByName = Object.fromEntries(response.body.data.map((tool) => [tool.function.name, tool]));
+
+    expect(response.status).toBe(200);
+    expect(toolsByName.frappe_query.metadata.riskClass).toBe('READ');
+    expect(toolsByName.frappe_mutate.metadata.riskClass).toBe('WRITE');
+  });
+
   test('invokes a named tool from the mounted workflow contract', async () => {
     const response = await request(app).post('/api/copilot/invoke').send({
       workflow_key: 'frappe_query',
@@ -99,6 +108,40 @@ describe('copilot routes and engine', () => {
     expect(exportResponse.body).toEqual({ data: definitions });
     expect(invokeResponse.status).toBe(200);
     expect(invokeResponse.body.success).toBe(true);
+  });
+
+  test('previews a mutation that has not been confirmed', async () => {
+    const response = await request(app).post('/invoke').send({
+      name: 'frappe_mutate',
+      args: { action: 'insert', doctype: 'Sales Order', data: { customer: 'CUST-1' } },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.result).toMatchObject({
+      preview: true,
+      requiresConfirmation: true,
+      riskClass: 'WRITE',
+      action: 'insert',
+      doctype: 'Sales Order',
+      name: null,
+      proposedData: { customer: 'CUST-1' },
+    });
+    expect(frappeClient.prototype.mutateDoc).not.toHaveBeenCalled();
+  });
+
+  test('forbids a confirmed mutation in a read-only workspace', async () => {
+    const response = await request(app).post('/invoke').send({
+      name: 'frappe_mutate',
+      args: { action: 'insert', doctype: 'Sales Order', data: { customer: 'CUST-1' }, confirmed: true },
+      context: { readOnly: true },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({
+      success: false,
+      error: 'Workspace is in read-only mode; mutations are forbidden',
+    });
+    expect(frappeClient.prototype.mutateDoc).not.toHaveBeenCalled();
   });
 
   test('returns a failed invocation response when a tool errors', async () => {

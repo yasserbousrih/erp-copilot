@@ -13,8 +13,12 @@ const invoke = async (req, res) => {
   const { workflow_key: workflowKey, name, params, args } = req.body || {};
   const toolName = name || workflowKey;
   const toolArgs = params ?? args ?? {};
+  const context = req.body?.context || {};
+  if (req.headers['x-read-only'] === 'true') {
+    context.readOnly = true;
+  }
   try {
-    return res.json({ success: true, result: await executeTool(toolName, toolArgs) });
+    return res.json({ success: true, result: await executeTool(toolName, toolArgs, undefined, context) });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
