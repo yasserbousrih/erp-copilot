@@ -3,6 +3,7 @@ const app = require('../src/app');
 const frappeClient = require('../src/client/frappeClient');
 const agentBrainClient = require('../src/services/agentBrainClient');
 const { definitions } = require('../src/tools/frappeTools');
+const auditLogger = require('../src/services/auditLogger');
 
 jest.mock('../src/client/frappeClient');
 jest.mock('../src/services/agentBrainClient');
@@ -10,6 +11,7 @@ jest.mock('../src/services/agentBrainClient');
 describe('copilot routes and engine', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    auditLogger.clear();
     frappeClient.prototype.getList.mockClear();
     agentBrainClient.ingestErpMessage.mockResolvedValue(null);
     frappeClient.prototype.getList.mockResolvedValue([{ item_code: 'ITEM-1', actual_qty: 12 }]);
@@ -127,6 +129,20 @@ describe('copilot routes and engine', () => {
       proposedData: { customer: 'CUST-1' },
     });
     expect(frappeClient.prototype.mutateDoc).not.toHaveBeenCalled();
+  });
+
+  test('returns filtered audit entries from mounted and root aliases', async () => {
+    auditLogger.log({ workspaceId: 'workspace-1', userId: 'user-1', action: 'insert', doctype: 'ToDo', data: {}, success: true, status: 'PREVIEW' });
+    auditLogger.log({ workspaceId: 'workspace-2', userId: 'user-2', action: 'update', doctype: 'ToDo', data: {}, success: true, status: 'EXECUTED' });
+
+    const mounted = await request(app).get('/api/copilot/audit?workspaceId=workspace-1&limit=1');
+    const root = await request(app).get('/audit?userId=user-2');
+
+    expect(mounted.status).toBe(200);
+    expect(mounted.body.data).toHaveLength(1);
+    expect(mounted.body.data[0].workspaceId).toBe('workspace-1');
+    expect(root.status).toBe(200);
+    expect(root.body.data[0].userId).toBe('user-2');
   });
 
   test('forbids a confirmed mutation in a read-only workspace', async () => {

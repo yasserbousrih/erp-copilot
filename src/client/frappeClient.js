@@ -1,6 +1,9 @@
 const axios = require('axios');
 const config = require('../config');
 
+const META_CACHE_TTL_MS = 900000;
+const metaCache = new Map();
+
 class FrappeClient {
   constructor(options = {}) {
     this.baseUrl = (options.url || config.FRAPPE_URL).replace(/\/$/, '');
@@ -45,8 +48,20 @@ class FrappeClient {
     return this.request('get', `/api/resource/${encodeURIComponent(doctype)}`, undefined, params);
   }
 
-  getMeta(doctype) { return this.request('get', '/api/method/frappe.desk.form.load.getdoctype',
-    undefined, { doctype }); }
+  async getMeta(doctype) {
+    const key = `${this.baseUrl}:${this.site || ''}:${doctype}`;
+    const cached = metaCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+    const value = await this.request('get', '/api/method/frappe.desk.form.load.getdoctype',
+      undefined, { doctype });
+    metaCache.set(key, { value, expiresAt: Date.now() + META_CACHE_TTL_MS });
+    return value;
+  }
+
+  clearMetaCache() { FrappeClient.clearMetaCache(); }
+
+  static clearMetaCache() { metaCache.clear(); }
 
   runReport(reportName, filters = {}) {
     return this.request('get', '/api/method/frappe.desk.query_report.run', undefined,

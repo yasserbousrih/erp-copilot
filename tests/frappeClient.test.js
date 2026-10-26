@@ -12,7 +12,45 @@ describe('FrappeClient', () => {
     timeout: 1234,
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    FrappeClient.clearMetaCache();
+  });
+
+  test('caches metadata by doctype for 15 minutes', async () => {
+    axios.get.mockResolvedValue({ data: { data: { fields: [{ fieldname: 'name' }] } } });
+
+    await expect(client.getMeta('Item')).resolves.toEqual({ fields: [{ fieldname: 'name' }] });
+    await expect(client.getMeta('Item')).resolves.toEqual({ fields: [{ fieldname: 'name' }] });
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
+  test('clears the metadata cache for deterministic refreshes', async () => {
+    axios.get
+      .mockResolvedValueOnce({ data: { data: { version: 1 } } })
+      .mockResolvedValueOnce({ data: { data: { version: 2 } } });
+
+    await client.getMeta('Item');
+    client.clearMetaCache();
+
+    await expect(client.getMeta('Item')).resolves.toEqual({ version: 2 });
+    expect(axios.get).toHaveBeenCalledTimes(2);
+  });
+
+  test('refreshes metadata after the 15 minute TTL expires', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-26T00:00:00Z'));
+    axios.get
+      .mockResolvedValueOnce({ data: { data: { version: 1 } } })
+      .mockResolvedValueOnce({ data: { data: { version: 2 } } });
+
+    await client.getMeta('Item');
+    jest.advanceTimersByTime(900001);
+
+    await expect(client.getMeta('Item')).resolves.toEqual({ version: 2 });
+    expect(axios.get).toHaveBeenCalledTimes(2);
+    jest.useRealTimers();
+  });
 
   test('gets a document with auth and tenant headers', async () => {
     axios.get.mockResolvedValue({ data: { data: { name: 'INV-1' } } });
